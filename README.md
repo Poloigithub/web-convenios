@@ -69,10 +69,18 @@ desapercibido se vigilan dos señales:
 
 Cuando hay problemas ocurren dos cosas:
 
-1. **Aviso por Telegram** (opcional), con el detalle y el enlace a la
-   ejecución. Se activa añadiendo dos secretos en el repositorio, en
-   *Settings → Secrets and variables → Actions*:
-   `TELEGRAM_TOKEN` y `TELEGRAM_CHAT_ID`.
+1. **Aviso por Telegram**, con el detalle y el enlace a la ejecución.
+   Sale de dos secretos del repositorio (*Settings → Secrets and
+   variables → Actions*): `TELEGRAM_TOKEN` y `TELEGRAM_CHAT_ID`.
+   Para mandar los avisos a otro chat basta con cambiar el segundo:
+
+   ```bash
+   gh secret set TELEGRAM_CHAT_ID    # pide el valor por teclado, no queda en el historial
+   ```
+
+   Para averiguar el chat_id de una conversación nueva: escribe algo al
+   bot desde ese chat y mira
+   `https://api.telegram.org/bot<TOKEN>/getUpdates`.
 2. **La ejecución se marca en rojo** en la pestaña Actions, *después* de
    haber publicado la web. GitHub manda entonces su correo automático de
    workflow fallido a la cuenta propietaria (esto no requiere configurar
