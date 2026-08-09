@@ -55,6 +55,37 @@ Para reconstruir el histórico desde enero (ya viene sembrado):
 python3 -m scraper.actualizar --desde 2026-01-01
 ```
 
+## Si algo se rompe, avisa
+
+La pasada diaria **no falla** cuando una sola fuente se rompe: la web se
+sigue publicando con lo que ya había. Para que un fallo no pase
+desapercibido se vigilan dos señales:
+
+- **Error**: la fuente lanzó una excepción al recoger.
+- **Canario**: `ultimo()` no ha podido leer el último boletín publicado
+  de ese diario. Es la señal importante, porque no depende de que ese
+  día hubiera convenios: si rediseñan el portal, salta aquí aunque el
+  scraper devuelva cero en silencio.
+
+Cuando hay problemas ocurren dos cosas:
+
+1. **Aviso por Telegram** (opcional), con el detalle y el enlace a la
+   ejecución. Se activa añadiendo dos secretos en el repositorio, en
+   *Settings → Secrets and variables → Actions*:
+   `TELEGRAM_TOKEN` y `TELEGRAM_CHAT_ID`.
+2. **La ejecución se marca en rojo** en la pestaña Actions, *después* de
+   haber publicado la web. GitHub manda entonces su correo automático de
+   workflow fallido a la cuenta propietaria (esto no requiere configurar
+   nada).
+
+Para probar el aviso sin esperar a que se rompa nada:
+
+```bash
+TELEGRAM_TOKEN=... TELEGRAM_CHAT_ID=... python3 -m scraper.actualizar --probar-aviso
+```
+
+Y para una pasada normal sin avisar: `--sin-aviso`.
+
 ## Límites conocidos
 
 - **BOP Castelló** solo expone los ~30 últimos boletines (unas 10 semanas):

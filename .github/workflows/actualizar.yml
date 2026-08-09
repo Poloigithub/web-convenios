@@ -19,6 +19,9 @@ concurrency:
 jobs:
   actualizar:
     runs-on: ubuntu-latest
+    outputs:
+      hay_problemas: ${{ steps.recoger.outputs.hay_problemas }}
+      problemas: ${{ steps.recoger.outputs.problemas }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +30,14 @@ jobs:
           python-version: "3.12"
 
       # Solo biblioteca estándar: no hay pip install.
+      # Si una fuente se rompe, este paso NO falla: deja constancia en
+      # sus outputs y avisa por Telegram, para que la web se publique
+      # igualmente con los datos que ya había.
       - name: Recoger convenios (ventana de 10 días)
+        id: recoger
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python3 -m scraper.actualizar
 
       - name: Guardar BBDD actualizada en el repositorio
@@ -67,3 +77,32 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Se ejecuta SIEMPRE, y solo después de haber publicado: marca la
+  # ejecución en rojo si alguna fuente falló. Así GitHub manda su correo
+  # automático de "workflow failed" sin haber impedido la publicación.
+  salud:
+    needs: [actualizar, publicar]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar el estado de las fuentes
+        # Por variables de entorno y no interpolando en el script: el
+        # texto de los problemas incluye mensajes de error de portales
+        # externos y no debe acabar dentro de un comando de shell.
+        env:
+          HAY_PROBLEMAS: ${{ needs.actualizar.outputs.hay_problemas }}
+          PROBLEMAS: ${{ needs.actualizar.outputs.problemas }}
+        run: |
+          if [ "$HAY_PROBLEMAS" = "true" ]; then
+            {
+              echo "## ⚠️ Fuentes con problemas"
+              echo
+              printf '%s\n' "$PROBLEMAS" | sed 's/^/- /'
+              echo
+              echo "La web se ha publicado igualmente con los datos anteriores."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "Hay fuentes con problemas (ver el resumen)."
+            exit 1
+          fi
+          echo "Las seis fuentes responden correctamente." >> "$GITHUB_STEP_SUMMARY"

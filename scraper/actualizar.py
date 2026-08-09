@@ -18,7 +18,7 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-from . import bd
+from . import avisar, bd
 from .comun import hoy_madrid, log
 from .fuentes import boe, bop_alicante, bop_castellon, bop_valencia, borm, dogv
 
@@ -72,11 +72,22 @@ def main() -> int:
     ap.add_argument("--solo", choices=sorted(FUENTES))
     ap.add_argument("--bd", type=Path, default=RAIZ / "datos" / "convenios.sqlite")
     ap.add_argument("--json", type=Path, default=RAIZ / "datos" / "convenios.json")
+    ap.add_argument("--sin-aviso", action="store_true",
+                    help="no enviar aviso aunque haya problemas")
+    ap.add_argument("--probar-aviso", action="store_true",
+                    help="manda un aviso de prueba y sale")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
+
+    if args.probar_aviso:
+        ok = avisar.enviar_telegram(avisar.mensaje(
+            ["(prueba) BOP Castelló: no se ha podido leer su último boletín"],
+            0, ""))
+        log.info("Aviso de prueba %s", "enviado" if ok else "NO enviado")
+        return 0 if ok else 1
 
     hoy = hoy_madrid()
     fin = args.hasta or hoy
@@ -102,6 +113,13 @@ def main() -> int:
     total = bd.exportar_json(con, args.json, estado, ultimos)
     log.info("BBDD: %d convenios en total; JSON exportado "
              "(últimos boletines de %d fuentes)", total, len(ultimos))
+
+    # Aviso de problemas. No cambia el código de salida: la web debe
+    # publicarse igual aunque una fuente se haya roto; de marcar la
+    # ejecución en rojo se encarga el workflow con la salida que deja
+    # avisar() en GITHUB_OUTPUT.
+    if not args.sin_aviso:
+        avisar.avisar(estado, ultimos, total)
 
     # La pasada solo se considera fallida si TODAS las fuentes fallaron.
     if estado and all(v.startswith("error") for v in estado.values()):
