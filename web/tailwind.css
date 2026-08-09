@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Paleta Catppuccin — Latte de día, Mocha de noche.
+   https://catppuccin.com/palette  (los nombres son los oficiales) */
+:root {
+  --ctp-base:     #eff1f5;
+  --ctp-mantle:   #e6e9ef;
+  --ctp-crust:    #dce0e8;
+  --ctp-surface0: #ccd0da;
+  --ctp-surface1: #bcc0cc;
+  --ctp-surface2: #acb0be;
+  --ctp-overlay0: #9ca0b0;
+  --ctp-overlay1: #8c8fa1;
+  --ctp-subtext0: #6c6f85;
+  --ctp-subtext1: #5c5f77;
+  --ctp-text:     #4c4f69;
+  --ctp-red:      #d20f39;
+  --ctp-maroon:   #e64553;
+  --ctp-peach:    #fe640b;
+  --ctp-yellow:   #df8e1d;
+  --ctp-green:    #40a02b;
+  --ctp-teal:     #179299;
+  --ctp-blue:     #1e66f5;
+  --ctp-lavender: #7287fd;
+  --ctp-mauve:    #8839ef;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ctp-base:     #1e1e2e;
+    --ctp-mantle:   #181825;
+    --ctp-crust:    #11111b;
+    --ctp-surface0: #313244;
+    --ctp-surface1: #45475a;
+    --ctp-surface2: #585b70;
+    --ctp-overlay0: #6c7086;
+    --ctp-overlay1: #7f849c;
+    --ctp-subtext0: #a6adc8;
+    --ctp-subtext1: #bac2de;
+    --ctp-text:     #cdd6f4;
+    --ctp-red:      #f38ba8;
+    --ctp-maroon:   #eba0ac;
+    --ctp-peach:    #fab387;
+    --ctp-yellow:   #f9e2af;
+    --ctp-green:    #a6e3a1;
+    --ctp-teal:     #94e2d5;
+    --ctp-blue:     #89b4fa;
+    --ctp-lavender: #b4befe;
+    --ctp-mauve:    #cba6f7;
+  }
+}

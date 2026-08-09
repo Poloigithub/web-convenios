@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Convenios colectivos — diarios oficiales</title>
+<meta name="description" content="Buscador de convenios colectivos y acuerdos laborales publicados en el BOE, DOGV, BOP de Castelló, València y Alicante y BORM de Murcia. Actualizado a diario.">
+<link rel="stylesheet" href="estilos.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+</head>
+<body class="min-h-screen bg-ctp-mantle text-ctp-text">
+
+<header class="bg-ctp-red">
+  <div class="mx-auto max-w-3xl px-4 py-5">
+    <h1 class="text-xl font-bold text-ctp-base sm:text-2xl">📋 Convenios en los diarios oficiales</h1>
+    <p class="mt-0.5 text-sm text-ctp-crust" id="meta">Cargando datos…</p>
+  </div>
+</header>
+
+<main class="mx-auto max-w-3xl px-4 pb-6">
+
+  <!-- Buscador (fijo al hacer scroll) -->
+  <div class="sticky top-0 z-10 -mx-4 bg-ctp-mantle px-4 pb-2 pt-4">
+    <section aria-label="Buscador">
+      <label for="q" class="sr-only">Buscar convenios</label>
+      <input id="q" type="search" autocomplete="off"
+             placeholder="Buscar sector, empresa, código…  ( / )"
+             class="w-full rounded-xl border border-ctp-surface1 bg-ctp-base px-4 py-3 text-base text-ctp-text shadow-sm outline-none ring-ctp-red placeholder:text-ctp-overlay0 focus:ring-2">
+      <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <button id="abrir-filtros" type="button" aria-expanded="false" aria-controls="filtros"
+                class="rounded-lg border border-ctp-surface1 bg-ctp-base px-3 py-1.5 text-sm font-semibold shadow-sm hover:bg-ctp-crust focus:outline-none focus:ring-2 focus:ring-ctp-red">
+          Filtros <span id="num-filtros" class="ml-1 hidden rounded-full bg-ctp-red px-1.5 text-xs font-bold text-ctp-base"></span>
+        </button>
+        <p id="recuento" class="text-sm text-ctp-subtext0" aria-live="polite"></p>
+      </div>
+    </section>
+  </div>
+
+  <!-- Panel de filtros (plegado por defecto) -->
+  <div id="filtros" hidden class="mt-2 rounded-xl border border-ctp-surface0 bg-ctp-base p-4 shadow-sm">
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label for="desde" class="mb-1 block text-sm font-semibold">Publicado desde</label>
+        <input id="desde" type="date"
+               class="w-full rounded-lg border border-ctp-surface1 bg-ctp-base px-3 py-2 text-ctp-text outline-none ring-ctp-red focus:ring-2">
+      </div>
+      <div>
+        <label for="hasta" class="mb-1 block text-sm font-semibold">Hasta</label>
+        <input id="hasta" type="date"
+               class="w-full rounded-lg border border-ctp-surface1 bg-ctp-base px-3 py-2 text-ctp-text outline-none ring-ctp-red focus:ring-2">
+      </div>
+    </div>
+    <fieldset class="mt-4">
+      <legend class="mb-2 text-sm font-semibold">Diario oficial</legend>
+      <div id="fuentes" class="flex flex-wrap gap-2" role="group"></div>
+    </fieldset>
+    <div class="mt-4 text-right">
+      <button id="limpiar" type="button"
+              class="rounded-lg border border-ctp-surface1 px-3 py-1.5 text-sm hover:bg-ctp-crust focus:outline-none focus:ring-2 focus:ring-ctp-red">
+        Quitar todos los filtros
+      </button>
+    </div>
+  </div>
+
+  <!-- Resultados -->
+  <section aria-label="Resultados" class="mt-3">
+    <div id="lista"></div>
+    <div id="vacio" class="hidden rounded-xl bg-ctp-base p-8 text-center shadow-sm" role="status">
+      <p class="text-ctp-subtext0">No hay resultados con estos filtros.</p>
+      <button id="limpiar-vacio" type="button"
+              class="mt-3 rounded-lg bg-ctp-red px-4 py-2 text-sm font-semibold text-ctp-base hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ctp-red focus:ring-offset-2 focus:ring-offset-ctp-mantle">
+        Quitar los filtros
+      </button>
+    </div>
+    <div class="mt-6 text-center">
+      <button id="mas" type="button"
+              class="hidden rounded-lg bg-ctp-red px-6 py-2.5 font-semibold text-ctp-base shadow-sm hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ctp-red focus:ring-offset-2 focus:ring-offset-ctp-mantle">
+        Mostrar más
+      </button>
+    </div>
+  </section>
+</main>
+
+<footer class="mt-8 border-t border-ctp-surface0 bg-ctp-base py-8 text-sm">
+  <div class="mx-auto max-w-3xl space-y-6 px-4">
+
+    <section aria-label="Diarios oficiales">
+      <h2 class="mb-3 font-bold text-ctp-subtext1">Diarios oficiales que se vigilan</h2>
+      <ul id="diarios" class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <!-- lo rellena app.js con enlace + último número publicado -->
+      </ul>
+    </section>
+
+    <div class="space-y-2 text-ctp-subtext0">
+      <p>Cada día se recogen de los sumarios públicos los convenios colectivos,
+         revisiones y tablas salariales, calendarios laborales, planes de igualdad
+         y ERTEs. Los enlaces llevan siempre al documento original.</p>
+      <p>El código de convenio se muestra cuando el título lo incluye.</p>
+      <p id="estado-fuentes"></p>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

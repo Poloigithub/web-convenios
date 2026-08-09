@@ -1,0 +1,69 @@
+name: Actualizar convenios y publicar web
+
+on:
+  schedule:
+    - cron: "30 5 * * *"        # 07:30 en España (invierno 06:30)
+  workflow_dispatch: {}          # botón para lanzarlo a mano
+  push:
+    branches: [main]             # re-publica la web al cambiar el código
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: actualizar
+  cancel-in-progress: false
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Solo biblioteca estándar: no hay pip install.
+      - name: Recoger convenios (ventana de 10 días)
+        run: python3 -m scraper.actualizar
+
+      - name: Guardar BBDD actualizada en el repositorio
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add datos/convenios.sqlite datos/convenios.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Datos: pasada del $(date -u +%F)"
+            git pull --rebase origin main
+            git push
+          else
+            echo "Sin cambios en los datos."
+          fi
+
+      - name: Construir la web (Tailwind)
+        run: |
+          curl -sL -o tailwindcss \
+            https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64
+          chmod +x tailwindcss
+          mkdir -p _site/datos
+          ./tailwindcss -i web/tailwind.css -o _site/estilos.css --minify
+          cp web/index.html web/app.js _site/
+          cp datos/convenios.json _site/datos/
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  publicar:
+    needs: actualizar
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
