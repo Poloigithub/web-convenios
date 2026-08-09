@@ -3,8 +3,21 @@
 @tailwind utilities;
 
 /* Paleta Catppuccin — Latte de día, Mocha de noche.
-   https://catppuccin.com/palette  (los nombres son los oficiales) */
+   https://catppuccin.com/palette  (los nombres son los oficiales)
+
+   El tema sale de la preferencia del sistema, pero el botón de la
+   cabecera puede forzarlo escribiendo data-theme en <html>.
+
+   Los valores de Mocha aparecen dos veces (en la media query y en
+   [data-theme="dark"]) a propósito: la alternativa moderna, light-dark(),
+   dejaría la web sin colores en navegadores algo antiguos, y esto lo
+   tiene que poder leer cualquiera. El bloque de data-theme va DESPUÉS
+   de la media query porque tienen la misma especificidad y debe ganar
+   la elección explícita de la persona. */
+
+/* ── Latte (claro) ── */
 :root {
+  color-scheme: light;
   --ctp-base:     #eff1f5;
   --ctp-mantle:   #e6e9ef;
   --ctp-crust:    #dce0e8;
@@ -27,8 +40,10 @@
   --ctp-mauve:    #8839ef;
 }
 
+/* ── Mocha automático: el sistema está en oscuro y no se ha forzado claro ── */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --ctp-base:     #1e1e2e;
     --ctp-mantle:   #181825;
     --ctp-crust:    #11111b;
@@ -51,3 +66,33 @@
     --ctp-mauve:    #cba6f7;
   }
 }
+
+/* ── Mocha forzado desde el botón ── */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ctp-base:     #1e1e2e;
+  --ctp-mantle:   #181825;
+  --ctp-crust:    #11111b;
+  --ctp-surface0: #313244;
+  --ctp-surface1: #45475a;
+  --ctp-surface2: #585b70;
+  --ctp-overlay0: #6c7086;
+  --ctp-overlay1: #7f849c;
+  --ctp-subtext0: #a6adc8;
+  --ctp-subtext1: #bac2de;
+  --ctp-text:     #cdd6f4;
+  --ctp-red:      #f38ba8;
+  --ctp-maroon:   #eba0ac;
+  --ctp-peach:    #fab387;
+  --ctp-yellow:   #f9e2af;
+  --ctp-green:    #a6e3a1;
+  --ctp-teal:     #94e2d5;
+  --ctp-blue:     #89b4fa;
+  --ctp-lavender: #b4befe;
+  --ctp-mauve:    #cba6f7;
+}
+
+/* Sin transición al cambiar de tema, a propósito: solo se podría poner
+   en <body>, así que su fondo y su texto llegarían tarde mientras el
+   resto de la página cambia de golpe. Durante esas décimas la web
+   parece rota (tarjetas claras con letra clara). Mejor instantáneo. */

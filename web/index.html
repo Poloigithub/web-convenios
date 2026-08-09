@@ -7,13 +7,35 @@
 <meta name="description" content="Buscador de convenios colectivos y acuerdos laborales publicados en el BOE, DOGV, BOP de Castelló, València y Alicante y BORM de Murcia. Actualizado a diario.">
 <link rel="stylesheet" href="estilos.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+<script>
+  /* Antes de pintar nada: si hay una elección guardada, aplicarla ya.
+     Si esto fuera al final, la página parpadearía con el tema contrario. */
+  try {
+    var t = localStorage.getItem("tema");
+    if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+  } catch (e) {}
+</script>
 </head>
 <body class="min-h-screen bg-ctp-mantle text-ctp-text">
 
 <header class="bg-ctp-red">
-  <div class="mx-auto max-w-3xl px-4 py-5">
-    <h1 class="text-xl font-bold text-ctp-base sm:text-2xl">📋 Convenios en los diarios oficiales</h1>
-    <p class="mt-0.5 text-sm text-ctp-crust" id="meta">Cargando datos…</p>
+  <div class="mx-auto flex max-w-3xl items-start justify-between gap-3 px-4 py-5">
+    <div>
+      <h1 class="text-xl font-bold text-ctp-base sm:text-2xl">📋 Convenios en los diarios oficiales</h1>
+      <p class="mt-0.5 text-sm text-ctp-crust" id="meta">Cargando datos…</p>
+    </div>
+    <div class="flex shrink-0 items-center gap-2">
+      <a href="#pie"
+         class="hidden rounded-lg border border-ctp-base px-2.5 py-1.5 text-sm font-semibold text-ctp-base
+                hover:bg-ctp-base hover:text-ctp-red focus:outline-none focus:ring-2 focus:ring-ctp-base sm:block">
+        Diarios ↓
+      </a>
+      <button id="tema" type="button"
+              class="rounded-lg border border-ctp-base px-2.5 py-1.5 text-lg leading-none text-ctp-base
+                     hover:bg-ctp-base hover:text-ctp-red focus:outline-none focus:ring-2 focus:ring-ctp-base">
+        <span id="tema-icono" aria-hidden="true">🌙</span>
+      </button>
+    </div>
   </div>
 </header>
 
@@ -81,7 +103,7 @@
   </section>
 </main>
 
-<footer class="mt-8 border-t border-ctp-surface0 bg-ctp-base py-8 text-sm">
+<footer id="pie" class="mt-8 scroll-mt-4 border-t border-ctp-surface0 bg-ctp-base py-8 text-sm">
   <div class="mx-auto max-w-3xl space-y-6 px-4">
 
     <section aria-label="Diarios oficiales">
@@ -98,6 +120,15 @@
       <p>El código de convenio se muestra cuando el título lo incluye.</p>
       <p id="estado-fuentes"></p>
     </div>
+
+    <p class="border-t border-ctp-surface0 pt-4 text-ctp-subtext0">
+      Creado por
+      <a href="https://bsky.app/profile/poloi.eurosky.social" target="_blank" rel="noopener"
+         class="font-semibold text-ctp-red underline decoration-ctp-surface1 underline-offset-2 hover:decoration-ctp-red">@poloi.eurosky.social</a>
+      utilizando Claude Code.
+      <a href="https://github.com/Poloigithub/web-convenios" target="_blank" rel="noopener"
+         class="font-semibold text-ctp-red underline decoration-ctp-surface1 underline-offset-2 hover:decoration-ctp-red">Código en GitHub ↗</a>
+    </p>
   </div>
 </footer>
 

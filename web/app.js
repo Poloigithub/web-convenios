@@ -197,6 +197,43 @@ function pintarDiarios(ultimos) {
   }
 }
 
+/* ---------- tema claro / oscuro ---------- */
+
+const consultaOscuro = window.matchMedia("(prefers-color-scheme: dark)");
+
+function temaActual() {
+  return document.documentElement.dataset.theme ||
+         (consultaOscuro.matches ? "dark" : "light");
+}
+
+function pintarBotonTema() {
+  const oscuro = temaActual() === "dark";
+  // El icono anuncia a dónde vas, no dónde estás.
+  $("tema-icono").textContent = oscuro ? "☀️" : "🌙";
+  $("tema").setAttribute(
+    "aria-label", oscuro ? "Cambiar a modo claro" : "Cambiar a modo oscuro");
+  $("tema").title = oscuro ? "Modo claro" : "Modo oscuro";
+}
+
+function prepararTema() {
+  pintarBotonTema();
+  $("tema").addEventListener("click", () => {
+    const nuevo = temaActual() === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = nuevo;
+    try {
+      localStorage.setItem("tema", nuevo);
+    } catch (e) {
+      // Modo privado o almacenamiento bloqueado: el cambio vale para
+      // esta visita, simplemente no se recuerda.
+    }
+    pintarBotonTema();
+  });
+  // Si no se ha elegido nada, seguir al sistema cuando cambie.
+  consultaOscuro.addEventListener("change", () => {
+    if (!document.documentElement.dataset.theme) pintarBotonTema();
+  });
+}
+
 /* ---------- filtros: panel y botones de fuente ---------- */
 
 function estiloBoton(btn, clave, activa) {
@@ -240,6 +277,7 @@ function quitarFiltros() {
 /* ---------- arranque ---------- */
 
 async function arrancar() {
+  prepararTema();
   pintarFuentes();
   pintarDiarios(null);
   esqueleto();
@@ -294,13 +332,9 @@ async function arrancar() {
   $("limpiar").addEventListener("click", quitarFiltros);
   $("limpiar-vacio").addEventListener("click", quitarFiltros);
 
-  // Carga automática al llegar al final (el botón queda de respaldo
-  // para teclado y lectores de pantalla).
-  new IntersectionObserver((entradas) => {
-    if (entradas[0].isIntersecting && !$("mas").classList.contains("hidden")) {
-      mostrarMas();
-    }
-  }, { rootMargin: "600px" }).observe($("mas"));
+  // Nada de carga automática al llegar al final: con scroll infinito el
+  // pie (los diarios y su último boletín) se aleja cada vez que te
+  // acercas y no hay manera de llegar. Se amplía solo al pulsar.
 
   aplicarFiltro();
 }
