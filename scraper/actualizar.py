@@ -19,7 +19,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from . import avisar, bd
-from .comun import hoy_madrid, log
+from .comun import Recuento, hoy_madrid, log
 from .fuentes import boe, bop_alicante, bop_castellon, bop_valencia, borm, dogv
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -28,11 +28,12 @@ VENTANA_DIAS = 10
 
 def _por_dias(modulo):
     """Adapta las fuentes con función dia(fecha) a la firma rango()."""
-    def rango(inicio: date, fin: date) -> list[dict]:
+    def rango(inicio: date, fin: date,
+              cuenta: Recuento | None = None) -> list[dict]:
         fuera = []
         f = inicio
         while f <= fin:
-            fuera += modulo.dia(f)
+            fuera += modulo.dia(f, cuenta)
             f += timedelta(days=1)
         return fuera
     return rango
@@ -72,6 +73,8 @@ def main() -> int:
     ap.add_argument("--solo", choices=sorted(FUENTES))
     ap.add_argument("--bd", type=Path, default=RAIZ / "datos" / "convenios.sqlite")
     ap.add_argument("--json", type=Path, default=RAIZ / "datos" / "convenios.json")
+    ap.add_argument("--ndjson", type=Path,
+                    default=RAIZ / "datos" / "convenios.ndjson")
     ap.add_argument("--sin-aviso", action="store_true",
                     help="no enviar aviso aunque haya problemas")
     ap.add_argument("--probar-aviso", action="store_true",
@@ -95,22 +98,33 @@ def main() -> int:
     log.info("Ventana %s … %s", inicio, fin)
 
     con = bd.abrir(args.bd)
+    # El sqlite no se versiona: en un runner recién clonado no existe y
+    # se reconstruye desde el NDJSON, que sí está en el repositorio.
+    recuperados = bd.importar_ndjson(con, args.ndjson)
+    if recuperados:
+        log.info("BBDD reconstruida desde %s (%d convenios)",
+                 args.ndjson.name, recuperados)
+
     estado: dict[str, str] = {}
+    recuentos: dict[str, Recuento] = {}
     for nombre, tarea in FUENTES.items():
         if args.solo and nombre != args.solo:
             continue
+        cuenta = Recuento()
+        recuentos[nombre] = cuenta
         try:
-            registros = tarea(inicio, fin)
+            registros = tarea(inicio, fin, cuenta)
             nuevos = bd.guardar(con, registros)
             estado[nombre] = str(nuevos)
-            log.info("%s → %d encontrados, %d nuevos",
-                     nombre, len(registros), nuevos)
+            log.info("%s → %d encontrados, %d nuevos (%s)",
+                     nombre, len(registros), nuevos, cuenta)
         except Exception as e:
             estado[nombre] = f"error: {str(e)[:80]}"
             log.warning("%s FALLÓ: %s", nombre, e)
 
     ultimos = ultimos_boletines()
     total = bd.exportar_json(con, args.json, estado, ultimos)
+    bd.exportar_ndjson(con, args.ndjson)
     log.info("BBDD: %d convenios en total; JSON exportado "
              "(últimos boletines de %d fuentes)", total, len(ultimos))
 
@@ -119,7 +133,7 @@ def main() -> int:
     # ejecución en rojo se encarga el workflow con la salida que deja
     # avisar() en GITHUB_OUTPUT.
     if not args.sin_aviso:
-        avisar.avisar(estado, ultimos, total)
+        avisar.avisar(estado, ultimos, total, recuentos)
 
     # La pasada solo se considera fallida si TODAS las fuentes fallaron.
     if estado and all(v.startswith("error") for v in estado.values()):

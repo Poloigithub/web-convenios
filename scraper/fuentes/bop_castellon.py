@@ -19,7 +19,8 @@ import urllib.parse
 import urllib.request
 from datetime import date
 
-from ..comun import TIMEOUT, USER_AGENT, interesa, limpiar, log, registro
+from ..comun import (TIMEOUT, USER_AGENT, Recuento, interesa, limpiar, log,
+                     registro)
 
 PAUSA = 1.5          # segundos entre boletines: el WAF corta las ráfagas
 REINTENTOS = 3
@@ -73,7 +74,8 @@ def _navega(op, vs: str, list_id: str, item_id: str, row: int) -> str:
     raise RuntimeError("inalcanzable")
 
 
-def rango(inicio: date, fin: date) -> list[dict]:
+def rango(inicio: date, fin: date,
+          cuenta: Recuento | None = None) -> list[dict]:
     op = _opener()
     with op.open(PORTAL, timeout=TIMEOUT) as r:
         home = r.read().decode("utf-8", "replace")
@@ -115,7 +117,11 @@ def rango(inicio: date, fin: date) -> list[dict]:
             break
         time.sleep(PAUSA)
         frag = _navega(op, vs, list_id, item_id, row)
-        for ident, bruto in RE_TITULO4.findall(frag):
+        anuncios = RE_TITULO4.findall(frag)
+        if cuenta:
+            cuenta.boletines += 1
+            cuenta.anuncios += len(anuncios)
+        for ident, bruto in anuncios:
             titulo = limpiar(bruto)
             if titulo and interesa(titulo):
                 fuera.append(registro(

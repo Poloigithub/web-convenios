@@ -16,7 +16,7 @@ import re
 import urllib.error
 from datetime import date
 
-from ..comun import descargar, limpiar, log, registro
+from ..comun import Recuento, descargar, limpiar, log, registro
 
 # Epígrafes del BOE que son relaciones laborales colectivas.
 RE_EPIGRAFE = re.compile(
@@ -40,7 +40,7 @@ def _url_pdf(item: dict) -> str:
             or f"https://www.boe.es/diario_boe/txt.php?id={item.get('identificador')}")
 
 
-def dia(fecha: date) -> list[dict]:
+def dia(fecha: date, cuenta: Recuento | None = None) -> list[dict]:
     url = f"https://boe.es/datosabiertos/api/boe/sumario/{fecha:%Y%m%d}"
     try:
         datos = json.loads(descargar(url, "application/json"))
@@ -52,15 +52,22 @@ def dia(fecha: date) -> list[dict]:
     fuera = []
     for diario in _lista(datos.get("data", {}).get("sumario", {}).get("diario")):
         numero = str(diario.get("numero") or "")
+        if cuenta:
+            cuenta.boletines += 1
         for seccion in _lista(diario.get("seccion")):
             for depto in _lista(seccion.get("departamento")):
-                # Los items pueden colgar del epígrafe o directamente
-                # del departamento (estos últimos, sin epígrafe, no
-                # pasan el filtro y se ignoran).
-                for epigrafe in _lista(depto.get("epigrafe")):
-                    if not RE_EPIGRAFE.search(str(epigrafe.get("nombre") or "")):
+                # Los items pueden colgar del epígrafe o directamente del
+                # departamento. Se cuentan TODOS (sean laborales o no):
+                # es la señal de que el sumario se sigue leyendo bien.
+                grupos = [(e.get("nombre"), _lista(e.get("item")))
+                          for e in _lista(depto.get("epigrafe"))]
+                grupos.append((None, _lista(depto.get("item"))))
+                for nombre, items in grupos:
+                    if cuenta:
+                        cuenta.anuncios += len(items)
+                    if not (nombre and RE_EPIGRAFE.search(str(nombre))):
                         continue
-                    for item in _lista(epigrafe.get("item")):
+                    for item in items:
                         if not item.get("identificador"):
                             continue
                         fuera.append(registro(
@@ -77,6 +84,7 @@ def dia(fecha: date) -> list[dict]:
 def ultimo() -> dict | None:
     """Número y fecha del último BOE publicado (retrocede hasta 5 días)."""
     from datetime import timedelta
+
     from ..comun import hoy_madrid
     for n in range(5):
         f = hoy_madrid() - timedelta(days=n)

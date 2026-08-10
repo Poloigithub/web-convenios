@@ -34,6 +34,41 @@ def abrir(ruta: Path) -> sqlite3.Connection:
     return con
 
 
+# ── El archivo de verdad es el NDJSON, no el sqlite ──────────────────
+#
+# Un .sqlite es binario: git no sabe hacer deltas y guarda una copia
+# entera en cada pasada diaria (~26 KB al día, ~9 MB al año) aunque solo
+# cambien dos filas. El NDJSON —una línea JSON por convenio, ordenado
+# por id— se deltea igual de bien que cualquier texto: ~1 KB al día.
+#
+# Así que en el repositorio va el NDJSON y el sqlite se reconstruye a
+# partir de él cuando hace falta. De regalo, en el diff de cada commit
+# se ve exactamente qué convenios entraron ese día.
+
+def exportar_ndjson(con: sqlite3.Connection, ruta: Path) -> int:
+    filas = con.execute(
+        f"SELECT {','.join(CAMPOS)} FROM convenios ORDER BY id").fetchall()
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    with ruta.open("w", encoding="utf-8") as f:
+        for fila in filas:
+            f.write(json.dumps(dict(zip(CAMPOS, fila)),
+                               ensure_ascii=False, sort_keys=True) + "\n")
+    return len(filas)
+
+
+def importar_ndjson(con: sqlite3.Connection, ruta: Path) -> int:
+    """Rellena la BBDD desde el NDJSON. Se usa al arrancar cuando el
+    sqlite no existe (por ejemplo en un runner recién clonado)."""
+    if not ruta.exists():
+        return 0
+    registros = []
+    for linea in ruta.read_text("utf-8").splitlines():
+        linea = linea.strip()
+        if linea:
+            registros.append(json.loads(linea))
+    return guardar(con, registros) if registros else 0
+
+
 def guardar(con: sqlite3.Connection, registros: list[dict]) -> int:
     """INSERT OR IGNORE: si ya existe el id, se conserva la fila original
     (y con ella la fecha_captura del día que se vio por primera vez).

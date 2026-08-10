@@ -17,12 +17,12 @@ import json
 import urllib.error
 from datetime import date
 
-from ..comun import descargar, interesa, limpiar, log, registro
+from ..comun import Recuento, descargar, interesa, limpiar, log, registro
 
 API = "https://www.borm.es/services/boletin/fecha/{dmy}/sumario"
 
 
-def dia(fecha: date) -> list[dict]:
+def dia(fecha: date, cuenta: Recuento | None = None) -> list[dict]:
     try:
         crudo = descargar(API.format(dmy=f"{fecha:%d-%m-%Y}"),
                           "application/json").decode("utf-8", "replace")
@@ -38,8 +38,13 @@ def dia(fecha: date) -> list[dict]:
         return []
 
     numero_boletin = str(datos.get("numero") or "")
+    anuncios = datos.get("anunciosBoletin") or []
+    if cuenta and numero_boletin:
+        cuenta.boletines += 1
+        cuenta.anuncios += len(anuncios)
+
     fuera = []
-    for an in (datos.get("anunciosBoletin") or []):
+    for an in anuncios:
         titulo = limpiar(str(an.get("sumario") or ""))
         if not titulo or not interesa(titulo):
             continue

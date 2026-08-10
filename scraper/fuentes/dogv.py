@@ -10,12 +10,12 @@ import json
 import urllib.error
 from datetime import date
 
-from ..comun import descargar, interesa, limpiar, log, registro
+from ..comun import Recuento, descargar, interesa, limpiar, log, registro
 
 API = "https://dogv.gva.es/dogv-portal/dogv?date={iso}&lang=es_es"
 
 
-def dia(fecha: date) -> list[dict]:
+def dia(fecha: date, cuenta: Recuento | None = None) -> list[dict]:
     try:
         crudo = descargar(API.format(iso=fecha.isoformat()),
                           "application/json").decode("utf-8", "replace")
@@ -31,9 +31,13 @@ def dia(fecha: date) -> list[dict]:
         return []
 
     numero = str((datos.get("cabecera") or {}).get("numeroDogv") or "")
+    disposiciones = datos.get("disposiciones") or []
+    if cuenta and numero:
+        cuenta.boletines += 1
+        cuenta.anuncios += len(disposiciones)
 
     fuera = []
-    for disp in (datos.get("disposiciones") or []):
+    for disp in disposiciones:
         if not isinstance(disp, dict):
             continue
         titulo = limpiar(str(disp.get("titulo") or ""))

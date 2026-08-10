@@ -8,3 +8,6 @@ tailwindcss
 config.env
 *.env
 !web/*.env
+
+# La BBDD se reconstruye desde convenios.ndjson (git no deltea binarios)
+datos/convenios.sqlite

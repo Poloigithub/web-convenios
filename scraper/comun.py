@@ -5,6 +5,8 @@ from __future__ import annotations
 import html
 import logging
 import re
+import time
+import urllib.error
 import urllib.request
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -74,15 +76,72 @@ def limpiar(s: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", s))).strip()
 
 
+REINTENTOS = 3
+ESPERAS = (3, 10, 30)        # segundos entre intentos
+
+
+def reintentar(hacer, descripcion: str = ""):
+    """Repite 'hacer' ante fallos pasajeros (timeouts, cortes, 5xx).
+
+    Los portales oficiales se caen a ratos, y una pasada de varios meses
+    hace cientos de peticiones: sin esto, un único timeout tira abajo
+    toda la fuente y se pierde el trabajo hecho.
+
+    Un 404 no se reintenta: significa que ese día no hay boletín.
+    """
+    for intento in range(REINTENTOS):
+        try:
+            return hacer()
+        except urllib.error.HTTPError as e:
+            if e.code < 500 or intento == REINTENTOS - 1:
+                raise
+            espera = ESPERAS[intento]
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            if intento == REINTENTOS - 1:
+                raise
+            espera = ESPERAS[intento]
+        log.info("%s: fallo pasajero, reintento en %ds", descripcion or "red",
+                 espera)
+        time.sleep(espera)
+    raise RuntimeError("inalcanzable")
+
+
 def descargar(url: str, accept: str = "*/*") -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT,
-                                               "Accept": accept})
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-        return r.read()
+    def hacer():
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT,
+                                                   "Accept": accept})
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return r.read()
+    return reintentar(hacer, url[:60])
 
 
 def hoy_madrid() -> date:
     return datetime.now(ZoneInfo("Europe/Madrid")).date()
+
+
+class Recuento:
+    """Lo que ha visto una fuente en una pasada, para saber si sigue viva.
+
+    No sirve contar convenios: que un boletín no traiga ninguno es de lo
+    más normal. Lo que no puede pasar es que un boletín que existe no
+    tenga NINGÚN anuncio de ningún tipo; si eso ocurre, el parser está
+    roto. Por eso se cuentan los anuncios antes de filtrarlos.
+
+    'declarados' lo rellenan las fuentes que publican su propio total
+    (el BOP de València dice "Mostrant del 1 al 25 de 104"): así se
+    detecta también una rotura parcial, no solo que no lea nada.
+    """
+
+    __slots__ = ("boletines", "anuncios", "declarados")
+
+    def __init__(self) -> None:
+        self.boletines = 0
+        self.anuncios = 0
+        self.declarados = 0
+
+    def __repr__(self) -> str:
+        d = f", {self.declarados} declarados" if self.declarados else ""
+        return f"{self.boletines} boletines, {self.anuncios} anuncios{d}"
 
 
 def registro(fuente: str, ident: str, titulo: str, numero_diario: str,

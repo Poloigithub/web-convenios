@@ -5,13 +5,17 @@ rompe, para que la web se siga publicando con el resto. Sin un aviso
 explícito, un portal que cambia de forma devolvería cero para siempre y
 nadie se enteraría.
 
-Se vigilan dos señales:
+Se vigilan tres señales:
 
   · error   — la fuente lanzó una excepción al recoger.
   · canario — ultimo() no ha podido leer el último boletín publicado.
-              Esta es la importante: no depende de que ese día hubiera
-              convenios, solo de que el portal se siga pudiendo leer.
-              Si rediseñan el portal, salta aquí.
+              No depende de que ese día hubiera convenios, solo de que
+              el portal se siga pudiendo leer.
+  · anuncios — se han leído boletines pero no se ha extraído ningún
+              anuncio de ninguna clase. Cero CONVENIOS es normalísimo y
+              no dice nada; cero ANUNCIOS en un boletín que existe es
+              imposible, así que delata al parser aunque el portal
+              siga respondiendo con normalidad.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ import os
 import urllib.parse
 import urllib.request
 
-from .comun import TIMEOUT, log
+from .comun import TIMEOUT, Recuento, log
 
 ETIQUETAS = {
     "BOE": "BOE (estatal)",
@@ -33,17 +37,43 @@ ETIQUETAS = {
 }
 
 
-def detectar(estado: dict[str, str], ultimos: dict[str, dict]) -> list[str]:
+MINIMO_DECLARADOS = 0.5      # leer menos de la mitad de lo anunciado es rotura
+
+
+def detectar(estado: dict[str, str], ultimos: dict[str, dict],
+             recuentos: dict[str, Recuento] | None = None) -> list[str]:
     """Devuelve una lista de problemas en lenguaje llano (vacía si todo va)."""
     problemas = []
+    recuentos = recuentos or {}
     for fuente, valor in estado.items():
         etiqueta = ETIQUETAS.get(fuente, fuente)
+
         if str(valor).startswith("error"):
             problemas.append(f"{etiqueta}: falló al recoger — {valor[7:]}")
-        elif fuente not in ultimos:
+            continue
+
+        if fuente not in ultimos:
             problemas.append(
                 f"{etiqueta}: no se ha podido leer su último boletín "
                 f"(puede que hayan cambiado el portal)")
+            continue
+
+        # Rotura del parser de anuncios. Ojo: NO se miran los convenios,
+        # que muy legítimamente pueden ser cero. Se miran los anuncios de
+        # cualquier tipo: un boletín que existe siempre trae anuncios, así
+        # que sacar cero solo puede significar que ya no sabemos leerlo.
+        c = recuentos.get(fuente)
+        if not c or not c.boletines:
+            continue                      # sin boletines no hay nada que juzgar
+        if c.anuncios == 0:
+            problemas.append(
+                f"{etiqueta}: se han leído {c.boletines} boletines pero "
+                f"ni un solo anuncio (el parser ha dejado de funcionar)")
+        elif c.declarados and c.anuncios < c.declarados * MINIMO_DECLARADOS:
+            problemas.append(
+                f"{etiqueta}: solo se han leído {c.anuncios} de los "
+                f"{c.declarados} anuncios que anuncia el portal "
+                f"(el parser lee a medias)")
     return problemas
 
 
@@ -80,10 +110,10 @@ def mensaje(problemas: list[str], total: int, url_run: str = "") -> str:
     return "\n".join(L)
 
 
-def avisar(estado: dict[str, str], ultimos: dict[str, dict],
-           total: int) -> list[str]:
+def avisar(estado: dict[str, str], ultimos: dict[str, dict], total: int,
+           recuentos: dict[str, Recuento] | None = None) -> list[str]:
     """Detecta, registra y avisa. Devuelve los problemas encontrados."""
-    problemas = detectar(estado, ultimos)
+    problemas = detectar(estado, ultimos, recuentos)
     if not problemas:
         log.info("Salud: las %d fuentes responden correctamente", len(estado))
         return []

@@ -1,5 +1,7 @@
 # Web Convenios
 
+**→ https://poloigithub.github.io/web-convenios/**
+
 Buscador de **convenios colectivos y acuerdos laborales** publicados en seis
 diarios oficiales, actualizado a diario con GitHub Actions y servido como web
 estática en GitHub Pages.
@@ -29,11 +31,24 @@ captura y URL del PDF/anuncio original.
 
 ```
 scraper/            un módulo por fuente + actualizar.py (orquestador)
-datos/convenios.sqlite   la BBDD canónica (la actualiza el workflow y la commitea)
+datos/convenios.ndjson   el archivo de verdad, versionado (una línea por convenio)
+datos/convenios.sqlite   la BBDD, generada desde el ndjson (NO versionada)
 datos/convenios.json     exportación que consume la web
 web/                index.html + app.js (vanilla) + tailwind.css
 .github/workflows/actualizar.yml   cron diario + build + deploy a Pages
 ```
+
+### Por qué el archivo es NDJSON y no el sqlite
+
+Un `.sqlite` es binario y git no sabe deltarlo: guardaría una copia
+entera en cada pasada diaria (~26 KB al día, ~9 MB al año) aunque solo
+cambiasen dos filas. El NDJSON —una línea JSON por convenio, ordenada
+por id— se deltea como cualquier texto: **~1 KB al día, ~360 KB al año**.
+
+Así que en el repositorio va el NDJSON, y el sqlite se reconstruye a
+partir de él al arrancar (`bd.importar_ndjson`). La BBDD se sigue
+publicando en la web para descargarla, en `datos/convenios.sqlite`.
+De regalo: en el diff de cada commit se ve qué convenios entraron ese día.
 
 - Solo **biblioteca estándar de Python**: no hay dependencias que instalar.
 - La pasada diaria relee una **ventana de 10 días**, así se autorepara si un
@@ -41,6 +56,30 @@ web/                index.html + app.js (vanilla) + tailwind.css
 - La web filtra y busca en cliente sobre el JSON: sin backend.
 - Paleta [Catppuccin](https://catppuccin.com/): Latte de día y Mocha en modo oscuro,
   vía variables CSS (sin variantes `dark:` en las clases).
+
+## Los datos
+
+Todo lo recogido está en abierto, en este mismo repositorio:
+
+| Fichero | Qué es |
+|---|---|
+| [`datos/convenios.ndjson`](datos/convenios.ndjson) | El archivo completo, una línea JSON por convenio. Es lo que se versiona. |
+| [`datos/convenios.json`](datos/convenios.json) | La misma información en un solo JSON, con metadatos. Es lo que consume la web. |
+
+La base de datos SQLite no se versiona (ver más abajo), pero se genera en un
+segundo desde el NDJSON:
+
+```bash
+python3 -c "from pathlib import Path; from scraper import bd; \
+  con=bd.abrir(Path('datos/convenios.sqlite')); \
+  print(bd.importar_ndjson(con, Path('datos/convenios.ndjson')), 'convenios')"
+```
+
+Y para consultarla:
+
+```bash
+sqlite3 datos/convenios.sqlite "SELECT fecha_publicacion, titulo FROM convenios WHERE fuente='BOP-CS' ORDER BY fecha_publicacion DESC LIMIT 10;"
+```
 
 ## Puesta en marcha
 
@@ -63,9 +102,14 @@ desapercibido se vigilan dos señales:
 
 - **Error**: la fuente lanzó una excepción al recoger.
 - **Canario**: `ultimo()` no ha podido leer el último boletín publicado
-  de ese diario. Es la señal importante, porque no depende de que ese
-  día hubiera convenios: si rediseñan el portal, salta aquí aunque el
-  scraper devuelva cero en silencio.
+  de ese diario. No depende de que ese día hubiera convenios.
+- **Anuncios**: se han leído boletines pero no se ha extraído *ningún
+  anuncio de ninguna clase*. Cero convenios es normalísimo y no dice
+  nada; cero anuncios en un boletín que existe es imposible, así que
+  delata al parser aunque el portal siga respondiendo con normalidad.
+  Cuando la fuente publica su propio total (el BOP de València dice
+  "Mostrant del 1 al 25 de 104") se detecta además la rotura parcial:
+  leer menos de la mitad de lo anunciado también avisa.
 
 Cuando hay problemas ocurren dos cosas:
 

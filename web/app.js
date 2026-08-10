@@ -299,7 +299,11 @@ async function arrancar() {
 
   let datos;
   try {
-    const r = await fetch("datos/convenios.json", { cache: "no-store" });
+    // Sin "no-store": así el navegador puede reaprovechar su copia y
+    // revalidarla con el ETag (respuesta 304, casi cero bytes) en vez de
+    // volver a bajarse el fichero entero en cada visita. Los datos
+    // cambian una vez al día; GitHub Pages los da con max-age=600.
+    const r = await fetch("datos/convenios.json");
     datos = await r.json();
   } catch {
     $("lista").innerHTML = "";

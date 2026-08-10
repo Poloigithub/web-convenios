@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 from datetime import date, datetime
 
-from ..comun import TIMEOUT, USER_AGENT, log, registro
+from ..comun import TIMEOUT, USER_AGENT, Recuento, log, registro
 
 WS = ("https://sede.diputacionalicante.es/wp-content/themes/generatepress/"
       "../Desarrollo-Diputacion/webservices/wseConsultaAjax.php")
@@ -32,7 +32,8 @@ def _campo(reg: dict, clave: str) -> str:
     return str(v[0]).strip() if isinstance(v, list) else str(v).strip()
 
 
-def rango(inicio: date, fin: date) -> list[dict]:
+def rango(inicio: date, fin: date,
+          cuenta: Recuento | None = None) -> list[dict]:
     q = urllib.parse.urlencode({
         "nemo": "BOP_COV",
         "param": "<parametros><tipo></tipo><entidad></entidad></parametros>",
@@ -44,8 +45,15 @@ def rango(inicio: date, fin: date) -> list[dict]:
     if "convenios" not in datos:
         raise RuntimeError(f"BOP-A: respuesta inesperada: {str(datos)[:120]}")
 
+    todos = datos["convenios"]["registro"]
+    # Aquí no hay boletines: el webservice devuelve la base entera de
+    # convenios. Que conteste con cero registros ya es la señal de rotura.
+    if cuenta:
+        cuenta.boletines += 1
+        cuenta.anuncios += len(todos)
+
     fuera = []
-    for reg in datos["convenios"]["registro"]:
+    for reg in todos:
         pub = _campo(reg, "publicacion")           # dd/mm/yyyy
         try:
             fecha = datetime.strptime(pub, "%d/%m/%Y").date()
