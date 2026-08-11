@@ -40,17 +40,46 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python3 -m scraper.actualizar
 
-      - name: Guardar BBDD actualizada en el repositorio
+      # Nada de 'pull --rebase': dos pasadas que diverjan (una ejecución
+      # relanzada, o un push mientras esta corre) chocaban en el mismo
+      # fichero y la pasada entera se perdía.
+      #
+      # Aquí no hay rebase que valga: se pone el árbol exactamente en el
+      # remoto y se vuelca encima la UNIÓN de los convenios. El ndjson es
+      # un conjunto, así que unir es la operación correcta y nadie pierde
+      # nada, venga de donde venga. El commit sale siempre en avance
+      # rápido sobre el remoto, de modo que el conflicto es imposible.
+      #
+      # La BBDD sobrevive al reset por estar en .gitignore, y con ella lo
+      # recogido en esta pasada.
+      - name: Guardar los convenios en el repositorio
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add datos/convenios.ndjson datos/convenios.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Datos: pasada del $(date -u +%F)"
-            git pull --rebase origin main
-            git push
+          git fetch -q origin main
+          git reset -q --hard origin/main
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from scraper import bd
+          con = bd.abrir(Path("datos/convenios.sqlite"))           # lo de esta pasada
+          bd.importar_ndjson(con, Path("datos/convenios.ndjson"))  # + lo del remoto
+          n = bd.exportar_ndjson(con, Path("datos/convenios.ndjson"))
+          # El JSON que consume la web se rehace con la unión ya dentro,
+          # reaprovechando el estado y los últimos boletines que acaba de
+          # calcular la pasada: así no se repite ni una petición.
+          web = Path("datos/convenios.json")
+          previo = json.loads(web.read_text("utf-8")) if web.exists() else {}
+          bd.exportar_json(con, web, previo.get("estado", {}),
+                           previo.get("ultimos", {}))
+          print(f"unión: {n} convenios")
+          PY
+          git add datos/convenios.ndjson
+          if git diff --cached --quiet; then
+            echo "Sin convenios nuevos."
           else
-            echo "Sin cambios en los datos."
+            git commit -m "Datos: pasada del $(date -u +%F)"
+            git push origin HEAD:main
           fi
 
       - name: Construir la web (Tailwind)

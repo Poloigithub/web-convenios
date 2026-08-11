@@ -33,7 +33,7 @@ captura y URL del PDF/anuncio original.
 scraper/            un módulo por fuente + actualizar.py (orquestador)
 datos/convenios.ndjson   el archivo de verdad, versionado (una línea por convenio)
 datos/convenios.sqlite   la BBDD, generada desde el ndjson (NO versionada)
-datos/convenios.json     exportación que consume la web
+datos/convenios.json     exportación que consume la web (NO versionada)
 web/                index.html + app.js (vanilla) + tailwind.css
 .github/workflows/actualizar.yml   cron diario + build + deploy a Pages
 ```
@@ -61,10 +61,15 @@ De regalo: en el diff de cada commit se ve qué convenios entraron ese día.
 
 Todo lo recogido está en abierto, en este mismo repositorio:
 
-| Fichero | Qué es |
-|---|---|
-| [`datos/convenios.ndjson`](datos/convenios.ndjson) | El archivo completo, una línea JSON por convenio. Es lo que se versiona. |
-| [`datos/convenios.json`](datos/convenios.json) | La misma información en un solo JSON, con metadatos. Es lo que consume la web. |
+| Fichero | Dónde | Qué es |
+|---|---|---|
+| [`datos/convenios.ndjson`](datos/convenios.ndjson) | En el repositorio | **El archivo completo**: una línea JSON por convenio, ordenada por id. Es lo único que se versiona. |
+| `datos/convenios.json` | [En la web](https://poloigithub.github.io/web-convenios/datos/convenios.json) | Lo mismo en un único JSON, con metadatos (último boletín de cada diario, estado de la última pasada). Es lo que consume la web. |
+
+El JSON no se versiona porque lleva la marca de tiempo de cada pasada:
+dos ejecuciones generan contenido distinto en la misma línea y eso hacía
+que cualquier divergencia acabase en conflicto. Al ser un fichero
+derivado del ndjson, se genera en cada pasada y se publica, sin más.
 
 La base de datos SQLite no se versiona (ver más abajo), pero se genera en un
 segundo desde el NDJSON:

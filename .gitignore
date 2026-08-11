@@ -11,3 +11,7 @@ config.env
 
 # La BBDD se reconstruye desde convenios.ndjson (git no deltea binarios)
 datos/convenios.sqlite
+
+# Generado en cada pasada (lleva marca de tiempo): conflictaría siempre.
+# El dato completo está en convenios.ndjson; el JSON se publica en la web.
+datos/convenios.json
