@@ -45,7 +45,10 @@ def dia(fecha: date, cuenta: Recuento | None = None) -> list[dict]:
             continue
         ruta = str(disp.get("urlPdf") or "")
         if ruta.startswith("/"):
-            enlace = "https://dogv.gva.es" + ruta
+            # El PDF se sirve bajo /datos. Sin ese prefijo el portal
+            # redirige a /va/... y acaba soltándote en su portada, con el
+            # último boletín publicado en vez del documento pedido.
+            enlace = "https://dogv.gva.es/datos" + ruta
         elif ruta:
             enlace = ruta
         else:
