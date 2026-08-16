@@ -108,6 +108,13 @@ desapercibido se vigilan dos señales:
 - **Error**: la fuente lanzó una excepción al recoger.
 - **Canario**: `ultimo()` no ha podido leer el último boletín publicado
   de ese diario. No depende de que ese día hubiera convenios.
+- **Enlaces**: el enlace del convenio más reciente de cada diario ya no
+  lleva al documento. Se comprueban los primeros bytes del fichero, no
+  la cabecera `Content-Type`: el BOP de Castelló sirve sus PDF como
+  `application/octet-stream`, así que la cabecera miente. El BORM es la
+  excepción esperada, porque enlaza a la página del anuncio. Esta
+  comprobación existe porque el fallo ocurrió: los enlaces del DOGV
+  llevaron meses a la portada del diario y nada lo detectaba.
 - **Anuncios**: se han leído boletines pero no se ha extraído *ningún
   anuncio de ninguna clase*. Cero convenios es normalísimo y no dice
   nada; cero anuncios en un boletín que existe es imposible, así que

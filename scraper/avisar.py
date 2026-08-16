@@ -11,6 +11,9 @@ Se vigilan tres señales:
   · canario — ultimo() no ha podido leer el último boletín publicado.
               No depende de que ese día hubiera convenios, solo de que
               el portal se siga pudiendo leer.
+  · enlaces — el enlace del último convenio de cada diario ya no lleva
+              al documento. Se comprueba porque pasó: los del DOGV
+              acabaron meses llevando a la portada del diario.
   · anuncios — se han leído boletines pero no se ha extraído ningún
               anuncio de ninguna clase. Cero CONVENIOS es normalísimo y
               no dice nada; cero ANUNCIOS en un boletín que existe es
@@ -25,7 +28,7 @@ import os
 import urllib.parse
 import urllib.request
 
-from .comun import TIMEOUT, Recuento, log
+from .comun import TIMEOUT, USER_AGENT, Recuento, log, reintentar
 
 ETIQUETAS = {
     "BOE": "BOE (estatal)",
@@ -38,6 +41,58 @@ ETIQUETAS = {
 
 
 MINIMO_DECLARADOS = 0.5      # leer menos de la mitad de lo anunciado es rotura
+
+# Qué debe devolver el enlace de cada diario. Casi todos sirven el PDF
+# del anuncio; el BORM es la excepción a propósito, porque su endpoint de
+# PDF está detrás de un antibots y enlazamos a la página del anuncio.
+#
+# Ojo: NO se mira el Content-Type. El BOP de Castelló manda sus PDF como
+# application/octet-stream, así que la cabecera miente; lo que no miente
+# son los primeros bytes del fichero.
+ENLACE = {"BOE": "pdf", "DOGV": "pdf", "BOP-CS": "pdf",
+          "BOP-V": "pdf", "BOP-A": "pdf", "BORM": "web"}
+
+
+def _primeros_bytes(url: str) -> tuple[int, bytes, str]:
+    """Abre el enlace y lee solo el principio: no hace falta el documento
+    entero para saber si es lo que dice ser."""
+    def hacer():
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return r.status, r.read(1024), r.geturl()
+    return reintentar(hacer, "enlace")
+
+
+def comprobar_enlaces(enlaces: dict[str, str]) -> list[str]:
+    """Comprueba un enlace por diario: que exista y sea lo que toca.
+
+    Nace de un fallo real: durante meses los enlaces del DOGV llevaban a
+    la portada del diario en vez de al documento, porque a la ruta del
+    PDF le faltaba un prefijo. Todo lo demás iba bien —se recogían los
+    convenios, no había errores— y ninguna comprobación lo miraba.
+    """
+    problemas = []
+    for fuente, url in enlaces.items():
+        etiqueta = ETIQUETAS.get(fuente, fuente)
+        espera = ENLACE.get(fuente, "pdf")
+        try:
+            estado, cabeza, final = _primeros_bytes(url)
+        except Exception as e:
+            problemas.append(f"{etiqueta}: el enlace del último convenio "
+                             f"no responde — {str(e)[:60]}")
+            continue
+
+        if espera == "pdf" and not cabeza.startswith(b"%PDF"):
+            pista = ("te deja en una página web en vez del documento"
+                     if b"<html" in cabeza[:600].lower()
+                     else "no devuelve un PDF")
+            problemas.append(
+                f"{etiqueta}: el enlace del último convenio {pista} "
+                f"({final[:70]})")
+        elif espera == "web" and estado != 200:
+            problemas.append(
+                f"{etiqueta}: el enlace del último convenio responde {estado}")
+    return problemas
 
 
 def detectar(estado: dict[str, str], ultimos: dict[str, dict],
@@ -111,9 +166,12 @@ def mensaje(problemas: list[str], total: int, url_run: str = "") -> str:
 
 
 def avisar(estado: dict[str, str], ultimos: dict[str, dict], total: int,
-           recuentos: dict[str, Recuento] | None = None) -> list[str]:
+           recuentos: dict[str, Recuento] | None = None,
+           enlaces: dict[str, str] | None = None) -> list[str]:
     """Detecta, registra y avisa. Devuelve los problemas encontrados."""
     problemas = detectar(estado, ultimos, recuentos)
+    if enlaces:
+        problemas += comprobar_enlaces(enlaces)
     if not problemas:
         log.info("Salud: las %d fuentes responden correctamente", len(estado))
         return []

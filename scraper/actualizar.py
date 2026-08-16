@@ -122,6 +122,12 @@ def main() -> int:
             estado[nombre] = f"error: {str(e)[:80]}"
             log.warning("%s FALLÓ: %s", nombre, e)
 
+    # Un enlace por diario (el del convenio más reciente) para comprobar
+    # que sigue llevando al documento y no a cualquier otro sitio.
+    enlaces = dict(con.execute(
+        "SELECT fuente, url_pdf FROM convenios WHERE rowid IN "
+        "(SELECT MAX(rowid) FROM convenios GROUP BY fuente)").fetchall())
+
     ultimos = ultimos_boletines()
     total = bd.exportar_json(con, args.json, estado, ultimos)
     bd.exportar_ndjson(con, args.ndjson)
@@ -133,7 +139,7 @@ def main() -> int:
     # ejecución en rojo se encarga el workflow con la salida que deja
     # avisar() en GITHUB_OUTPUT.
     if not args.sin_aviso:
-        avisar.avisar(estado, ultimos, total, recuentos)
+        avisar.avisar(estado, ultimos, total, recuentos, enlaces)
 
     # La pasada solo se considera fallida si TODAS las fuentes fallaron.
     if estado and all(v.startswith("error") for v in estado.values()):
