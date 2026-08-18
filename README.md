@@ -123,7 +123,18 @@ desapercibido se vigilan dos señales:
   "Mostrant del 1 al 25 de 104") se detecta además la rotura parcial:
   leer menos de la mitad de lo anunciado también avisa.
 
-Cuando hay problemas ocurren dos cosas:
+**No se avisa al primer tropiezo.** Los portales oficiales se caen a
+ratos y la ventana de diez días recupera sola lo que se pierda, así que
+un timeout suelto no es nada que haya que mirar. Solo se avisa cuando la
+misma fuente falla en **dos pasadas seguidas**, que es cuando ya no es
+mala suerte. La cuenta se lleva en `datos/salud.json` y se borra en
+cuanto la fuente vuelve a funcionar. Una alarma que salta sin motivo
+acaba ignorándose, y entonces no sirve de nada.
+
+Además, un día suelto que falle ya no tumba la fuente entera: se anota y
+se sigue por el siguiente. Solo se da por fallida si no se salvó ni uno.
+
+Cuando hay problemas de verdad ocurren dos cosas:
 
 1. **Aviso por Telegram**, con el detalle y el enlace a la ejecución.
    Sale de dos secretos del repositorio (*Settings → Secrets and

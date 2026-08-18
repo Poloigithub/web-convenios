@@ -5,28 +5,37 @@ rompe, para que la web se siga publicando con el resto. Sin un aviso
 explícito, un portal que cambia de forma devolvería cero para siempre y
 nadie se enteraría.
 
-Se vigilan tres señales:
+Se vigilan cuatro señales:
 
-  · error   — la fuente lanzó una excepción al recoger.
-  · canario — ultimo() no ha podido leer el último boletín publicado.
-              No depende de que ese día hubiera convenios, solo de que
-              el portal se siga pudiendo leer.
-  · enlaces — el enlace del último convenio de cada diario ya no lleva
-              al documento. Se comprueba porque pasó: los del DOGV
-              acabaron meses llevando a la portada del diario.
+  · error    — la fuente lanzó una excepción al recoger.
+  · canario  — ultimo() no ha podido leer el último boletín publicado.
+               No depende de que ese día hubiera convenios, solo de que
+               el portal se siga pudiendo leer.
   · anuncios — se han leído boletines pero no se ha extraído ningún
-              anuncio de ninguna clase. Cero CONVENIOS es normalísimo y
-              no dice nada; cero ANUNCIOS en un boletín que existe es
-              imposible, así que delata al parser aunque el portal
-              siga respondiendo con normalidad.
+               anuncio de ninguna clase. Cero CONVENIOS es normalísimo y
+               no dice nada; cero ANUNCIOS en un boletín que existe es
+               imposible, así que delata al parser aunque el portal siga
+               respondiendo con normalidad.
+  · enlaces  — el enlace del último convenio ya no lleva al documento.
+               Se comprueba porque pasó: los del DOGV llevaron meses a
+               la portada del diario y nada lo detectaba.
+
+Y, sobre todas ellas, una regla: NO se avisa al primer tropiezo. Los
+portales oficiales se caen a ratos y la ventana de diez días recupera
+sola lo que se pierda, así que un timeout suelto no es nada que haya que
+mirar. Solo se avisa cuando la misma fuente falla en pasadas seguidas,
+que es cuando ya no es mala suerte. Una alarma que salta sin motivo
+acaba ignorándose, y entonces no sirve para nada.
 """
 
 from __future__ import annotations
 
 import html
+import json
 import os
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 from .comun import TIMEOUT, USER_AGENT, Recuento, log, reintentar
 
@@ -39,7 +48,7 @@ ETIQUETAS = {
     "BORM": "BORM (Múrcia)",
 }
 
-
+AVISAR_TRAS = 2              # pasadas seguidas fallando antes de avisar
 MINIMO_DECLARADOS = 0.5      # leer menos de la mitad de lo anunciado es rotura
 
 # Qué debe devolver el enlace de cada diario. Casi todos sirven el PDF
@@ -53,64 +62,21 @@ ENLACE = {"BOE": "pdf", "DOGV": "pdf", "BOP-CS": "pdf",
           "BOP-V": "pdf", "BOP-A": "pdf", "BORM": "web"}
 
 
-def _primeros_bytes(url: str) -> tuple[int, bytes, str]:
-    """Abre el enlace y lee solo el principio: no hace falta el documento
-    entero para saber si es lo que dice ser."""
-    def hacer():
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            return r.status, r.read(1024), r.geturl()
-    return reintentar(hacer, "enlace")
-
-
-def comprobar_enlaces(enlaces: dict[str, str]) -> list[str]:
-    """Comprueba un enlace por diario: que exista y sea lo que toca.
-
-    Nace de un fallo real: durante meses los enlaces del DOGV llevaban a
-    la portada del diario en vez de al documento, porque a la ruta del
-    PDF le faltaba un prefijo. Todo lo demás iba bien —se recogían los
-    convenios, no había errores— y ninguna comprobación lo miraba.
-    """
-    problemas = []
-    for fuente, url in enlaces.items():
-        etiqueta = ETIQUETAS.get(fuente, fuente)
-        espera = ENLACE.get(fuente, "pdf")
-        try:
-            estado, cabeza, final = _primeros_bytes(url)
-        except Exception as e:
-            problemas.append(f"{etiqueta}: el enlace del último convenio "
-                             f"no responde — {str(e)[:60]}")
-            continue
-
-        if espera == "pdf" and not cabeza.startswith(b"%PDF"):
-            pista = ("te deja en una página web en vez del documento"
-                     if b"<html" in cabeza[:600].lower()
-                     else "no devuelve un PDF")
-            problemas.append(
-                f"{etiqueta}: el enlace del último convenio {pista} "
-                f"({final[:70]})")
-        elif espera == "web" and estado != 200:
-            problemas.append(
-                f"{etiqueta}: el enlace del último convenio responde {estado}")
-    return problemas
-
+# ─────────────────────────── Señales ───────────────────────────
 
 def detectar(estado: dict[str, str], ultimos: dict[str, dict],
-             recuentos: dict[str, Recuento] | None = None) -> list[str]:
-    """Devuelve una lista de problemas en lenguaje llano (vacía si todo va)."""
-    problemas = []
+             recuentos: dict[str, Recuento] | None = None) -> dict[str, str]:
+    """Problemas de recogida, uno por fuente (dict vacío si todo va)."""
+    problemas: dict[str, str] = {}
     recuentos = recuentos or {}
     for fuente, valor in estado.items():
-        etiqueta = ETIQUETAS.get(fuente, fuente)
-
         if str(valor).startswith("error"):
-            problemas.append(f"{etiqueta}: falló al recoger — {valor[7:]}")
+            problemas[fuente] = f"falló al recoger — {valor[7:]}"
             continue
 
         if fuente not in ultimos:
-            problemas.append(
-                f"{etiqueta}: no se ha podido leer su último boletín "
-                f"(puede que hayan cambiado el portal)")
+            problemas[fuente] = ("no se ha podido leer su último boletín "
+                                 "(puede que hayan cambiado el portal)")
             continue
 
         # Rotura del parser de anuncios. Ojo: NO se miran los convenios,
@@ -121,16 +87,80 @@ def detectar(estado: dict[str, str], ultimos: dict[str, dict],
         if not c or not c.boletines:
             continue                      # sin boletines no hay nada que juzgar
         if c.anuncios == 0:
-            problemas.append(
-                f"{etiqueta}: se han leído {c.boletines} boletines pero "
-                f"ni un solo anuncio (el parser ha dejado de funcionar)")
+            problemas[fuente] = (f"se han leído {c.boletines} boletines pero "
+                                 f"ni un solo anuncio (el parser ha dejado "
+                                 f"de funcionar)")
         elif c.declarados and c.anuncios < c.declarados * MINIMO_DECLARADOS:
-            problemas.append(
-                f"{etiqueta}: solo se han leído {c.anuncios} de los "
-                f"{c.declarados} anuncios que anuncia el portal "
-                f"(el parser lee a medias)")
+            problemas[fuente] = (f"solo se han leído {c.anuncios} de los "
+                                 f"{c.declarados} anuncios que anuncia el "
+                                 f"portal (el parser lee a medias)")
     return problemas
 
+
+def _primeros_bytes(url: str) -> tuple[int, bytes, str]:
+    """Abre el enlace y lee solo el principio: no hace falta el documento
+    entero para saber si es lo que dice ser."""
+    def hacer():
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return r.status, r.read(1024), r.geturl()
+    return reintentar(hacer, "enlace")
+
+
+def comprobar_enlaces(enlaces: dict[str, str]) -> dict[str, str]:
+    """Comprueba un enlace por diario: que exista y sea lo que toca."""
+    problemas: dict[str, str] = {}
+    for fuente, url in enlaces.items():
+        espera = ENLACE.get(fuente, "pdf")
+        try:
+            estado, cabeza, final = _primeros_bytes(url)
+        except Exception as e:
+            problemas[fuente] = ("el enlace del último convenio no responde "
+                                 f"— {str(e)[:60]}")
+            continue
+
+        if espera == "pdf" and not cabeza.startswith(b"%PDF"):
+            pista = ("te deja en una página web en vez del documento"
+                     if b"<html" in cabeza[:600].lower()
+                     else "no devuelve un PDF")
+            problemas[fuente] = (f"el enlace del último convenio {pista} "
+                                 f"({final[:70]})")
+        elif espera == "web" and estado != 200:
+            problemas[fuente] = (f"el enlace del último convenio responde "
+                                 f"{estado}")
+    return problemas
+
+
+# ──────────────────── Insistencia entre pasadas ────────────────────
+
+def _cargar(ruta: Path) -> dict[str, dict]:
+    try:
+        return json.loads(ruta.read_text("utf-8"))
+    except Exception:
+        return {}
+
+
+def racha(problemas: dict[str, str], ruta: Path,
+          hoy: str) -> tuple[dict[str, dict], dict[str, dict]]:
+    """Lleva la cuenta de fallos seguidos y decide de qué hay que avisar.
+
+    Devuelve (estado nuevo, lo que merece aviso). Una fuente que vuelve a
+    funcionar se le borra la cuenta: solo preocupa lo que persiste.
+    """
+    previo = _cargar(ruta)
+    nuevo: dict[str, dict] = {}
+    for fuente, motivo in problemas.items():
+        antes = previo.get(fuente, {})
+        nuevo[fuente] = {
+            "fallos": int(antes.get("fallos", 0)) + 1,
+            "desde": antes.get("desde", hoy),
+            "motivo": motivo,
+        }
+    avisables = {f: d for f, d in nuevo.items() if d["fallos"] >= AVISAR_TRAS}
+    return nuevo, avisables
+
+
+# ─────────────────────────── Aviso ───────────────────────────
 
 def enviar_telegram(texto: str) -> bool:
     """Manda el aviso al chat de Telegram. Sin credenciales, no hace nada."""
@@ -155,29 +185,56 @@ def enviar_telegram(texto: str) -> bool:
         return False
 
 
-def mensaje(problemas: list[str], total: int, url_run: str = "") -> str:
-    L = ["<b>⚠️ Web Convenios: revisar</b>",
-         "", "La recogida diaria ha tenido problemas:"]
-    L += [f"· {html.escape(p)}" for p in problemas]
+def mensaje(lineas: list[str], total: int, url_run: str = "") -> str:
+    L = ["<b>⚠️ Web Convenios: revisar</b>", "",
+         "Estas fuentes llevan varias pasadas fallando:"]
+    L += [f"· {html.escape(t)}" for t in lineas]
     L += ["", f"La web sigue publicada con los {total} convenios que ya había."]
     if url_run:
-        L.append(f'<a href="{html.escape(url_run, quote=True)}">Ver el registro de la ejecución</a>')
+        L.append(f'<a href="{html.escape(url_run, quote=True)}">'
+                 "Ver el registro de la ejecución</a>")
     return "\n".join(L)
 
 
 def avisar(estado: dict[str, str], ultimos: dict[str, dict], total: int,
            recuentos: dict[str, Recuento] | None = None,
-           enlaces: dict[str, str] | None = None) -> list[str]:
-    """Detecta, registra y avisa. Devuelve los problemas encontrados."""
+           enlaces: dict[str, str] | None = None,
+           salud: Path | None = None, hoy: str = "") -> list[str]:
+    """Detecta, lleva la cuenta y avisa de lo que persiste."""
     problemas = detectar(estado, ultimos, recuentos)
     if enlaces:
-        problemas += comprobar_enlaces(enlaces)
+        for fuente, motivo in comprobar_enlaces(enlaces).items():
+            problemas.setdefault(fuente, motivo)
+
+    salud = salud or Path("datos/salud.json")
+    nuevo, avisables = racha(problemas, salud, hoy)
+
+    try:
+        salud.parent.mkdir(parents=True, exist_ok=True)
+        salud.write_text(json.dumps(nuevo, ensure_ascii=False, indent=1,
+                                    sort_keys=True) + "\n", "utf-8")
+    except Exception as e:
+        log.warning("No se ha podido guardar %s: %s", salud, e)
+
     if not problemas:
         log.info("Salud: las %d fuentes responden correctamente", len(estado))
         return []
 
-    for p in problemas:
-        log.warning("SALUD: %s", p)
+    for fuente, dato in nuevo.items():
+        cuantos = dato["fallos"]
+        aguanta = "" if cuantos >= AVISAR_TRAS else "  (aún sin avisar)"
+        log.warning("SALUD: %s: %s [%d seguidas]%s",
+                    ETIQUETAS.get(fuente, fuente), dato["motivo"],
+                    cuantos, aguanta)
+
+    if not avisables:
+        log.info("Nada que avisar: ningún fallo llega a %d pasadas seguidas",
+                 AVISAR_TRAS)
+        return []
+
+    lineas = [f"{ETIQUETAS.get(f, f)}: {d['motivo']} "
+              f"({d['fallos']} pasadas seguidas, desde el {d['desde']})"
+              for f, d in avisables.items()]
 
     url_run = ""
     servidor = os.environ.get("GITHUB_SERVER_URL")
@@ -186,7 +243,7 @@ def avisar(estado: dict[str, str], ultimos: dict[str, dict], total: int,
     if servidor and repo and run:
         url_run = f"{servidor}/{repo}/actions/runs/{run}"
 
-    enviar_telegram(mensaje(problemas, total, url_run))
+    enviar_telegram(mensaje(lineas, total, url_run))
 
     # Para que el workflow pueda marcar la ejecución en rojo (y GitHub
     # mande su correo automático) sin impedir que la web se publique.
@@ -194,5 +251,5 @@ def avisar(estado: dict[str, str], ultimos: dict[str, dict], total: int,
     if salida:
         with open(salida, "a", encoding="utf-8") as f:
             f.write("hay_problemas=true\n")
-            f.write("problemas<<FIN\n" + "\n".join(problemas) + "\nFIN\n")
-    return problemas
+            f.write("problemas<<FIN\n" + "\n".join(lineas) + "\nFIN\n")
+    return lineas

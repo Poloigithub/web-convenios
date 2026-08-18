@@ -56,8 +56,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # El parte de salud lleva la cuenta de fallos seguidos y tiene
+          # que sobrevivir al reset, que lo devolvería al de la pasada
+          # anterior y haría que la cuenta nunca avanzase.
+          cp -f datos/salud.json /tmp/salud.json 2>/dev/null || true
           git fetch -q origin main
           git reset -q --hard origin/main
+          cp -f /tmp/salud.json datos/salud.json 2>/dev/null || true
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -74,7 +79,7 @@ jobs:
                            previo.get("ultimos", {}))
           print(f"unión: {n} convenios")
           PY
-          git add datos/convenios.ndjson
+          git add datos/convenios.ndjson datos/salud.json
           if git diff --cached --quiet; then
             echo "Sin convenios nuevos."
           else

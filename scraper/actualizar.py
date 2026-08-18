@@ -26,26 +26,43 @@ RAIZ = Path(__file__).resolve().parent.parent
 VENTANA_DIAS = 10
 
 
-def _por_dias(modulo):
-    """Adapta las fuentes con función dia(fecha) a la firma rango()."""
+def _por_dias(modulo, nombre: str):
+    """Adapta las fuentes con función dia(fecha) a la firma rango().
+
+    Un día que falle no tumba la fuente entera: se anota y se sigue por
+    el siguiente. Antes, un único timeout en cualquiera de los diez días
+    de la ventana echaba a perder los otros nueve, que estaban perfectos.
+    Solo se da la fuente por fallida si no se salvó ni un día.
+    """
     def rango(inicio: date, fin: date,
               cuenta: Recuento | None = None) -> list[dict]:
-        fuera = []
+        fuera, fallidos, dias = [], [], 0
         f = inicio
         while f <= fin:
-            fuera += modulo.dia(f, cuenta)
+            dias += 1
+            try:
+                fuera += modulo.dia(f, cuenta)
+            except Exception as e:
+                log.warning("%s %s: %s", nombre, f, e)
+                fallidos.append(f)
             f += timedelta(days=1)
+        if fallidos:
+            log.warning("%s: %d de %d días sin leer (%s)", nombre,
+                        len(fallidos), dias,
+                        ", ".join(str(d) for d in fallidos[:5]))
+        if len(fallidos) == dias:
+            raise RuntimeError(f"ningún día accesible ({len(fallidos)} intentos)")
         return fuera
     return rango
 
 
 FUENTES = {
-    "BOE": _por_dias(boe),
-    "DOGV": _por_dias(dogv),
+    "BOE": _por_dias(boe, "BOE"),
+    "DOGV": _por_dias(dogv, "DOGV"),
     "BOP-CS": bop_castellon.rango,
     "BOP-V": bop_valencia.rango,
     "BOP-A": bop_alicante.rango,
-    "BORM": _por_dias(borm),
+    "BORM": _por_dias(borm, "BORM"),
 }
 
 MODULOS = {"BOE": boe, "DOGV": dogv, "BOP-CS": bop_castellon,
@@ -75,6 +92,8 @@ def main() -> int:
     ap.add_argument("--json", type=Path, default=RAIZ / "datos" / "convenios.json")
     ap.add_argument("--ndjson", type=Path,
                     default=RAIZ / "datos" / "convenios.ndjson")
+    ap.add_argument("--salud", type=Path,
+                    default=RAIZ / "datos" / "salud.json")
     ap.add_argument("--sin-aviso", action="store_true",
                     help="no enviar aviso aunque haya problemas")
     ap.add_argument("--probar-aviso", action="store_true",
@@ -139,7 +158,8 @@ def main() -> int:
     # ejecución en rojo se encarga el workflow con la salida que deja
     # avisar() en GITHUB_OUTPUT.
     if not args.sin_aviso:
-        avisar.avisar(estado, ultimos, total, recuentos, enlaces)
+        avisar.avisar(estado, ultimos, total, recuentos, enlaces,
+                      args.salud, hoy.isoformat())
 
     # La pasada solo se considera fallida si TODAS las fuentes fallaron.
     if estado and all(v.startswith("error") for v in estado.values()):
