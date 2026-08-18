@@ -1,1 +1,12 @@
-{}
+{
+ "BOP-A": {
+  "desde": "2026-08-18",
+  "fallos": 1,
+  "motivo": "falló al recoger — Expecting value: line 1 column 1 (char 0)"
+ },
+ "BOP-V": {
+  "desde": "2026-08-18",
+  "fallos": 1,
+  "motivo": "falló al recoger — <urlopen error timed out>"
+ }
+}
