@@ -1,1 +1,7 @@
-{}
+{
+ "BOP-CS": {
+  "desde": "2026-09-29",
+  "fallos": 1,
+  "motivo": "falló al recoger — HTTP Error 503: Service Unavailable"
+ }
+}
