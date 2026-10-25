@@ -1,1 +1,7 @@
-{}
+{
+ "BOP-V": {
+  "desde": "2026-10-25",
+  "fallos": 1,
+  "motivo": "falló al recoger — Remote end closed connection without response"
+ }
+}
