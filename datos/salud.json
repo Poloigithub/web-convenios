@@ -1,7 +1,7 @@
 {
  "BOP-CS": {
   "desde": "2026-11-10",
-  "fallos": 2,
-  "motivo": "se han leído 4 boletines pero ni un solo anuncio (el parser ha dejado de funcionar)"
+  "fallos": 3,
+  "motivo": "se han leído 5 boletines pero ni un solo anuncio (el parser ha dejado de funcionar)"
  }
 }
