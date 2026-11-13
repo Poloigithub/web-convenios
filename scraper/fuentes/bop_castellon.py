@@ -29,8 +29,14 @@ PORTAL = "https://bop.dipcas.es/PortalBOP/"
 MESES = {m: i + 1 for i, m in enumerate(
     "enero febrero marzo abril mayo junio julio agosto "
     "septiembre octubre noviembre diciembre".split())}
+# El portal cambió en noviembre de 2026 la forma de sus enlaces:
+# de  api/descargarAnuncio?idAnuncio=167451&idioma=es
+# a   api/descargarAnuncio/es/MLifel2dCW   (token opaco, sin id numérico).
+# Se aceptan las dos: el histórico guardado usa la primera.
 RE_TITULO4 = re.compile(
-    r'descargarAnuncio\?idAnuncio=(\d+).*?<span class="titulo4">(.*?)</span>',
+    r'descargarAnuncio(?:\?idAnuncio=(?P<num>\d+)[^"]*'
+    r'|/(?P<idioma>[a-z]{2})/(?P<clave>[A-Za-z0-9_-]+))'
+    r'.*?<span class="titulo4">(?P<titulo>.*?)</span>',
     re.S)
 
 
@@ -117,17 +123,24 @@ def rango(inicio: date, fin: date,
             break
         time.sleep(PAUSA)
         frag = _navega(op, vs, list_id, item_id, row)
-        anuncios = RE_TITULO4.findall(frag)
+        anuncios = list(RE_TITULO4.finditer(frag))
         if cuenta:
             cuenta.boletines += 1
             cuenta.anuncios += len(anuncios)
-        for ident, bruto in anuncios:
-            titulo = limpiar(bruto)
-            if titulo and interesa(titulo):
-                fuera.append(registro(
-                    fuente="BOP-CS", ident=f"BOP-CS-{ident}", titulo=titulo,
-                    numero_diario=num, fecha_publicacion=fecha,
-                    url_pdf=f"{PORTAL}api/descargarAnuncio?idAnuncio={ident}&idioma=es"))
+        for m in anuncios:
+            titulo = limpiar(m.group("titulo"))
+            if not (titulo and interesa(titulo)):
+                continue
+            if m.group("num"):
+                clave = m.group("num")
+                url = f"{PORTAL}api/descargarAnuncio?idAnuncio={clave}&idioma=es"
+            else:
+                clave = m.group("clave")
+                url = (f"{PORTAL}api/descargarAnuncio/"
+                       f"{m.group('idioma')}/{clave}")
+            fuera.append(registro(
+                fuente="BOP-CS", ident=f"BOP-CS-{clave}", titulo=titulo,
+                numero_diario=num, fecha_publicacion=fecha, url_pdf=url))
     return fuera
 
 
