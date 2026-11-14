@@ -11,6 +11,7 @@ No se puede hacer backfill más atrás.
 
 from __future__ import annotations
 
+import hashlib
 import http.cookiejar
 import re
 import time
@@ -21,6 +22,18 @@ from datetime import date
 
 from ..comun import (TIMEOUT, USER_AGENT, Recuento, interesa, limpiar, log,
                      registro)
+
+def _ident(fecha: date, titulo: str) -> str:
+    """Identificador estable, derivado del contenido y no del enlace.
+
+    El portal cambió sus URLs en noviembre de 2026 y, como el id salía
+    de la URL, los mismos anuncios volvieron a entrar como nuevos y se
+    duplicaron. Derivándolo de fecha y título eso no puede repetirse,
+    cambien las URLs las veces que cambien.
+    """
+    clave = f"{fecha.isoformat()}|{titulo}".encode("utf-8")
+    return "BOP-CS-" + hashlib.sha1(clave).hexdigest()[:12]
+
 
 PAUSA = 1.5          # segundos entre boletines: el WAF corta las ráfagas
 REINTENTOS = 3
@@ -139,7 +152,7 @@ def rango(inicio: date, fin: date,
                 url = (f"{PORTAL}api/descargarAnuncio/"
                        f"{m.group('idioma')}/{clave}")
             fuera.append(registro(
-                fuente="BOP-CS", ident=f"BOP-CS-{clave}", titulo=titulo,
+                fuente="BOP-CS", ident=_ident(fecha, titulo), titulo=titulo,
                 numero_diario=num, fecha_publicacion=fecha, url_pdf=url))
     return fuera
 
